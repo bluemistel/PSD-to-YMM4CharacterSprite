@@ -1,16 +1,38 @@
-# React + Vite
+# 動く立ち絵MakerKIT 「ウゴメキ」(ugomeki)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+PSDファイルをゆっくりMovieMaker4 (YMM4) の動く立ち絵形式に変換・管理するためのデスクトップアプリです。
 
-Currently, two official plugins are available:
+## 主な機能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **PSDファイルの直接読み込み**: PSDをドラッグ＆ドロップするだけで解析
+- **カテゴリ仕分け**: 眉、目、口、体、髪などのパーツをドラッグ＆ドロップで簡単に分類
+- **結合モード (Composite)**: 複数のレイヤーを1つのパーツとして結合して書き出し
+- **PSDTool記法対応**: `!` (強制表示)、`*` (ラジオボタン)、`:flip` (反転) などの独自記法をUI上で再現
+- **リアルタイムプレビュー**: 
+  - 仕分け中のパーツの組み合わせをスライダーで確認
+  - ツリー上のチェックボックスで個別に表示/非表示を切り替え
+- **一括書き出し**: YMM4が読み込み可能なフォルダ構造とファイル名で最適化して出力
 
-## React Compiler
+## 使い方
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. アプリを起動し、PSDファイルを中央のキャンバスにドラッグ＆ドロップします。
+2. 左側のレイヤーツリーから素材を選択し、右側の「カテゴリ仕分け」エリアへドラッグして分類します。
+3. プレビュー画面でスライダーを動かし、意図通りにパーツが切り替わるか確認します。
+4. 「YMM4形式で書き出し」ボタンを押し、出力先を設定して書き出します。
 
-## Expanding the ESLint configuration
+## 開発・ビルド
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### 開発モード
+```bash
+npm install
+npm run dev
+```
+
+### ビルド (ポータブル実行ファイルの作成)
+```bash
+npm run build
+```
+ビルド完了後、`release` フォルダにポータブル版の実行ファイルが生成されます。
+
+## ライセンス
+MIT License

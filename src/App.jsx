@@ -187,7 +187,7 @@ function App() {
           if (saved.exportFolderName) setExportFolderName(saved.exportFolderName);
         }
       }
-    } catch (err) { console.error("Failed to load PSD:", err); alert("Failed to load PSD file."); }
+    } catch (err) { console.error("Failed to load PSD:", err); alert("PSDファイルの読み込みに失敗しました。"); }
     finally { setIsProcessing(false); }
   };
 
@@ -485,7 +485,7 @@ function App() {
   };
 
   const handleExport = async () => {
-    if (!psdData || !outputPath || !exportFolderName) { alert("Invalid export settings."); return; }
+    if (!psdData || !outputPath || !exportFolderName) { alert("書き出し設定が正しくありません。"); return; }
     setIsProcessing(true); setShowExportModal(false);
     try {
       const scale = exportWidth / psdData.width;
@@ -513,8 +513,8 @@ function App() {
             await saveImg(ctx => drawNodeRecursively(nodeMapRef.current.get(item.fullPath), ctx, scale), dir, item.name);
         }
       }
-      alert("Export completed!");
-    } catch (err) { console.error(err); alert("Export failed: " + err.message); }
+      alert("書き出しが完了しました！");
+    } catch (err) { console.error(err); alert("書き出しに失敗しました: " + err.message); }
     finally { setIsProcessing(false); }
   };
 
@@ -569,12 +569,13 @@ function App() {
   return (
     <div className="app-container main-layout">
       <header className="header glass">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <h1>PSD to YMM4</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <img src="icon.png" alt="logo" className="header-logo" />
+          <h1>動く立ち絵MakerKIT</h1>
           {psdData && (
             <div className="mode-switcher glass">
-              <button className={viewMode === 'mapping' ? 'active' : ''} onClick={() => { setViewMode('mapping'); setPreviewComposite(null); }}>Mapping</button>
-              <button className={viewMode === 'preview' ? 'active' : ''} onClick={() => { setViewMode('preview'); setPreviewComposite(null); }}>Preview</button>
+              <button className={viewMode === 'mapping' ? 'active' : ''} onClick={() => { setViewMode('mapping'); setPreviewComposite(null); }}>仕分け</button>
+              <button className={viewMode === 'preview' ? 'active' : ''} onClick={() => { setViewMode('preview'); setPreviewComposite(null); }}>プレビュー</button>
             </div>
           )}
         </div>
@@ -588,7 +589,7 @@ function App() {
             </>
           )}
           <button className="btn-primary" onClick={() => setShowExportModal(true)} disabled={!psdData || isProcessing}>
-            {isProcessing ? 'Exporting...' : 'Export to YMM4'}
+            {isProcessing ? '書き出し中...' : 'YMM4形式で書き出し'}
           </button>
         </div>
       </header>
@@ -596,8 +597,8 @@ function App() {
       <div className="workspace">
         <aside className="tree-sidebar glass" style={{ width: `${sidebarWidth}px`, flex: 'none' }}>
           <div className="sidebar-header">
-            <h3>Layers</h3>
-            {!psdData && <span style={{ fontSize: '0.8rem', opacity: 0.5 }}>No file loaded</span>}
+            <h3>レイヤー</h3>
+            {!psdData && <span style={{ fontSize: '0.8rem', opacity: 0.5 }}>ファイル未選択</span>}
           </div>
           <div className="scroll-area">
             {treeData.map(n => renderTreeNode(n))}
@@ -608,18 +609,18 @@ function App() {
 
         <main className="preview-center" style={{ flex: 1 }}>
           <div className="canvas-wrapper glass" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
-            {!psdData ? <div className="drop-zone"><p>Drag & Drop PSD here</p></div> : <canvas ref={canvasRef} />}
+            {!psdData ? <div className="drop-zone"><p>ここにPSDファイルをドラッグ＆ドロップ</p></div> : <canvas ref={canvasRef} />}
             {viewMode === 'mapping' && previewComposite && (
               <div className="selection-label composite-preview-badge">
-                📦 Composite Preview: {mappingData[previewComposite.category]?.composites[previewComposite.variantIdx]?.name}
+                📦 結合プレビュー: {mappingData[previewComposite.category]?.composites[previewComposite.variantIdx]?.name}
                 <button onClick={() => setPreviewComposite(null)} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>✕</button>
               </div>
             )}
-            {viewMode === 'mapping' && !previewComposite && selectedPaths.size > 0 && <div className="selection-label">Viewing: {selectedPaths.size} item(s)</div>}
+            {viewMode === 'mapping' && !previewComposite && selectedPaths.size > 0 && <div className="selection-label">選択中: {selectedPaths.size} アイテム</div>}
           </div>
           {viewMode === 'preview' && (
             <div className="viewer-controls glass">
-              <h4>Live Preview Controls</h4>
+              <h4>プレビューコントロール</h4>
               <div className="category-sliders">
                 {RENDER_ORDER.slice().reverse().map(category => {
                   const cat = mappingData[category];
@@ -651,7 +652,7 @@ function App() {
                       <div className="label">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <button className={`visibility-toggle ${hidden ? 'off' : 'on'}`} onClick={() => toggleSlotVisibility(category)}>{hidden ? '👁️‍🗨️' : '👁️'}</button>
-                          <span>{category}{cat.mode === 'composite' ? ' (C)' : ''}</span>
+                          <span>{category}{cat.mode === 'composite' ? ' (結合)' : ''}</span>
                         </div>
                         <span className="val">{items[selections[category] || 0]?.name}</span>
                       </div>
@@ -667,7 +668,7 @@ function App() {
         <div className="resizer-h" onMouseDown={() => { isResizingMapping.current = true; document.body.style.cursor = 'col-resize'; }} />
 
         <div className="mapping-grid glass" style={{ width: `${mappingWidth}px`, flex: 'none' }}>
-          <div className="mapping-header"><h3>Category Mapping</h3></div>
+          <div className="mapping-header"><h3>カテゴリ仕分け</h3></div>
           <div className="grid">
             {RENDER_ORDER.slice().reverse().map(category => {
               const cat = mappingData[category];
@@ -678,11 +679,11 @@ function App() {
                       <h4 title="ドラッグ&ドロップの後に名前をクリックして選択">{category}</h4>
                       <div className="mode-toggle" onClick={() => toggleCategoryMode(category)} title="結合グループを作成します。グループ内は1枚に結合された見た目になります">
                         <div className={`track ${cat.mode}`}><div className="thumb" /></div>
-                        <span className="label">Composite</span>
+                        <span className="label">結合モード</span>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <button className="btn-clear" onClick={() => clearCategory(category)}>Clear</button>
+                      <button className="btn-clear" onClick={() => clearCategory(category)}>全削除</button>
                       {cat.mode === 'composite' && <button className="btn-icon add" onClick={() => addCompositeVariant(category)}>+</button>}
                     </div>
                   </div>
@@ -696,7 +697,7 @@ function App() {
                           <div className="item-header" onClick={e => e.stopPropagation()}>
                             <input type="text" value={variant.name} onChange={e => { const nd = { ...mappingData }; nd[category].composites[cIdx].name = e.target.value; setMappingData(nd); }} />
                             <div className="actions">
-                              <button className="btn-icon" onClick={() => duplicateCompositeVariant(category, cIdx)} title="Duplicate">📑</button>
+                              <button className="btn-icon" onClick={() => duplicateCompositeVariant(category, cIdx)} title="複製">📑</button>
                               <button className="btn-icon delete" onClick={() => removeCompositeVariant(category, cIdx)}>×</button>
                             </div>
                           </div>
@@ -719,7 +720,7 @@ function App() {
                           <button onClick={() => removeFromCategory(category, n.fullPath)}>×</button>
                         </div>
                       ))}
-                      {!cat.items.length && <span className="placeholder">Drop layers here</span>}
+                      {!cat.items.length && <span className="placeholder">素材をドロップ</span>}
                     </div>
                   )}
                 </div>
@@ -732,25 +733,25 @@ function App() {
       {showExportModal && (
         <div className="modal-overlay">
           <div className="modal-content glass">
-            <h2>Export Settings</h2>
+            <h2>書き出し設定</h2>
             <div className="form-group">
-              <label>Output Directory:</label>
+              <label>出力先フォルダ:</label>
               <input type="text" value={outputPath} onChange={e => setOutputPath(e.target.value)} className="glass" />
             </div>
             <div className="form-group">
-              <label>Folder Name:</label>
+              <label>フォルダ名:</label>
               <input type="text" value={exportFolderName} onChange={e => setExportFolderName(e.target.value)} className="glass" />
             </div>
             <div className="form-row">
-              <div className="form-group"><label>Width:</label><input type="number" value={exportWidth} onChange={e => handleWidthChange(e.target.value)} className="glass" /></div>
-              <div className="form-group"><label>Height:</label><input type="number" value={exportHeight} onChange={e => handleHeightChange(e.target.value)} className="glass" /></div>
+              <div className="form-group"><label>幅:</label><input type="number" value={exportWidth} onChange={e => handleWidthChange(e.target.value)} className="glass" /></div>
+              <div className="form-group"><label>高さ:</label><input type="number" value={exportHeight} onChange={e => handleHeightChange(e.target.value)} className="glass" /></div>
             </div>
             <div className="form-group checkbox">
-              <label><input type="checkbox" checked={maintainAspect} onChange={e => setMaintainAspect(e.target.checked)} /> Maintain Aspect Ratio</label>
+              <label><input type="checkbox" checked={maintainAspect} onChange={e => setMaintainAspect(e.target.checked)} /> アスペクト比を維持</label>
             </div>
             <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setShowExportModal(false)}>Cancel</button>
-              <button className="btn-primary" onClick={handleExport}>Export</button>
+              <button className="btn-secondary" onClick={() => setShowExportModal(false)}>キャンセル</button>
+              <button className="btn-primary" onClick={handleExport}>書き出し</button>
             </div>
           </div>
         </div>

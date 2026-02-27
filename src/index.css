@@ -74,6 +74,12 @@ body {
   color: var(--accent-color);
 }
 
+.header-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
 .workspace {
   flex: 1;
   display: flex;

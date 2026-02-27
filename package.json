@@ -1,14 +1,38 @@
 {
-  "name": "psd-to-ymm4",
+  "name": "ugomeki",
+  "productName": "ウゴメキ",
+  "description": "動く立ち絵MakerKIT",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "commonjs",
+  "author": "Antigravity",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "set \"ELECTRON_RUN_AS_NODE=\" && vite",
-    "build": "vite build",
+    "build": "vite build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview"
+  },
+  "build": {
+    "appId": "com.ugomeki.app",
+    "productName": "ウゴメキ",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist",
+      "dist-electron"
+    ],
+    "win": {
+      "icon": "public/icon.png",
+      "target": [
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "dependencies": {
     "ag-psd": "^30.1.0",
@@ -24,6 +48,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "electron": "^40.6.1",
+    "electron-builder": "^25.1.8",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
