@@ -448,7 +448,7 @@ function App() {
           const slotKey = `${category}${i}`;
           if (disabledSlots.has(slotKey)) continue;
           if (cat.mode === 'composite') {
-            const vi = selections[category] || 0;
+            const vi = selections[slotKey] || 0;
             const variant = cat.composites[vi];
             if (variant) variant.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx));
           } else {
@@ -628,7 +628,7 @@ function App() {
                   if (category === '他' || category === '後') {
                     return [1, 2, 3].map(i => {
                       const slotKey = `${category}${i}`;
-                      const items = cat.items;
+                      const items = cat.mode === 'composite' ? cat.composites : cat.items;
                       const hidden = disabledSlots.has(slotKey);
                       return items.length > 0 && (
                         <div key={`sl-${slotKey}`} className={`mini-slider slot ${hidden ? 'hidden' : ''}`}>
