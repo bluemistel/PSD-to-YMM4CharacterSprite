@@ -582,6 +582,9 @@ function App() {
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
           {psdData && (
             <>
+              <button className="btn-secondary" onClick={() => window.location.reload()} title="初期状態に戻して別のPSDファイルを読み込みます" disabled={isProcessing}>
+                リロード
+              </button>
               <label className="toggle-label flip-toggle">
                 <input type="checkbox" checked={showFlipLayers} onChange={e => setShowFlipLayers(e.target.checked)} />
                 <span>反転レイヤー表示</span>

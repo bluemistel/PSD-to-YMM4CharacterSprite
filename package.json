@@ -3,9 +3,9 @@
   "productName": "ウゴメキ",
   "description": "動く立ち絵MakerKIT",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "commonjs",
-  "author": "Antigravity",
+  "author": "あおもや",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "set \"ELECTRON_RUN_AS_NODE=\" && vite",
