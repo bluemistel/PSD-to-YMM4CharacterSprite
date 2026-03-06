@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { readPsd } from 'ag-psd';
+import EyeblinkLipSyncPopup from './EyeblinkLipSyncPopup';
 
 const fs = window.require ? window.require('fs-extra') : {};
 const path = window.require ? window.require('path') : {};
@@ -58,6 +59,7 @@ function App() {
   const [exportFolderName, setExportFolderName] = useState('');
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [mappingWidth, setMappingWidth] = useState(340);
+  const [showEyeblinkPopup, setShowEyeblinkPopup] = useState(false);
   const isResizingSidebar = useRef(false);
   const isResizingMapping = useRef(false);
 
@@ -576,6 +578,7 @@ function App() {
             <div className="mode-switcher glass">
               <button className={viewMode === 'mapping' ? 'active' : ''} onClick={() => { setViewMode('mapping'); setPreviewComposite(null); }}>仕分け</button>
               <button className={viewMode === 'preview' ? 'active' : ''} onClick={() => { setViewMode('preview'); setPreviewComposite(null); }}>プレビュー</button>
+              <button onClick={() => setShowEyeblinkPopup(true)} title="出力済みの画像から目パチ・口パク用ファイルを作成します">目パチ・口パク</button>
             </div>
           )}
         </div>
@@ -759,6 +762,8 @@ function App() {
           </div>
         </div>
       )}
+
+      {showEyeblinkPopup && <EyeblinkLipSyncPopup onClose={() => setShowEyeblinkPopup(false)} />}
     </div>
   );
 }

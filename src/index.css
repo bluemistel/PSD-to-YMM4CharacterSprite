@@ -813,3 +813,120 @@ body {
   border-left-color: var(--accent-color);
   font-weight: 600;
 }
+
+/* Eye Blink & Lip Sync Popup Styles */
+.grid-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+
+.grid-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.grid-item.selected {
+  border-color: var(--accent-color);
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.grid-item-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: none;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 4px;
+  border-radius: 6px;
+  backdrop-filter: blur(4px);
+  z-index: 10;
+}
+
+.grid-item:hover .grid-item-actions {
+  display: flex;
+}
+
+.grid-item-actions button {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 2px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.grid-item-actions button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.setting-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 130px;
+  height: 140px;
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  flex: none;
+}
+
+.setting-slot.empty {
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.setting-slot .slot-title {
+  position: absolute;
+  top: -12px;
+  background: var(--bg-secondary);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  color: var(--accent-color);
+  border: 1px solid var(--glass-border);
+  z-index: 2;
+  white-space: nowrap;
+}
+
+.setting-slot img {
+  max-width: 90%;
+  max-height: 80px;
+  object-fit: contain;
+  margin-top: 10px;
+}
+
+.setting-slot .slot-name {
+  font-size: 0.7rem;
+  margin-top: auto;
+  margin-bottom: 5px;
+  color: var(--text-secondary);
+  width: 90%;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.setting-slot .remove-slot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 1rem;
+  z-index: 5;
+}
