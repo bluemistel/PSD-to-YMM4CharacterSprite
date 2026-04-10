@@ -9,6 +9,9 @@ const { webUtils } = window.require ? window.require('electron') : {};
 // Back-to-Front rendering order
 const RENDER_ORDER = ['後', '体', '顔色', '口', '目', '眉', '髪', '他'];
 const SLOT_COUNT = 3;
+const CURRENT_VERSION = '1.0.4';
+const BOOTH_URL = 'https://bluemist.booth.pm/items/8064115';
+const NOTION_FORM_URL = 'https://ionian-gallimimus-e47.notion.site/32b8c5bf8aa481978f37e470a25e1e01';
 
 const INITIAL_MAPPING_DATA = RENDER_ORDER.reduce((acc, cat) => {
   acc[cat] = { mode: cat === '体' ? 'composite' : 'simple', items: [], composites: cat === '体' ? [{ name: '体1', layers: [] }] : [] };
@@ -60,10 +63,13 @@ function App() {
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [mappingWidth, setMappingWidth] = useState(340);
   const [showEyeblinkPopup, setShowEyeblinkPopup] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [showAppInfoModal, setShowAppInfoModal] = useState(false);
+  const [latestVersion, setLatestVersion] = useState(null);
   const isResizingSidebar = useRef(false);
   const isResizingMapping = useRef(false);
 
-  const sanitizeFilename = (name) => name.replace(/[\\/:*?"<>|!]/g, '').trim();
+  const sanitizeFilename = (name) => name.replace(/:/g, '：').replace(/\*/g, '＊').replace(/[\\/?"<>|!]/g, '').trim();
 
   const saveState = useCallback(async (currentPsdPath, currentMappingData, currentSelections, currentDisabledSlots, currentRadioSelections, currentOutputPath, currentFolderName, currentTreeVisibility) => {
     if (!currentPsdPath) return;
@@ -95,9 +101,15 @@ function App() {
       if (isResizingMapping.current) setMappingWidth(Math.max(250, Math.min(800, window.innerWidth - e.clientX)));
     };
     const handleMouseUp = () => { isResizingSidebar.current = false; isResizingMapping.current = false; document.body.style.cursor = 'default'; };
+    const handleClickOutside = (e) => { if (!e.target.closest('.menu-container')) setDropdownOpen(false); };
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-    return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => { 
+      window.removeEventListener('mousemove', handleMouseMove); 
+      window.removeEventListener('mouseup', handleMouseUp); 
+      window.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const handleDrop = async (e) => {
@@ -125,8 +137,9 @@ function App() {
       setExportWidth(psd.width);
       setExportHeight(psd.height);
 
-      const buildTree = (children, parentPath = '', inForcedTree = false) => children.map(child => {
+      const buildTree = (children, parentPath = '', inForcedTree = false) => [...children].reverse().map(child => {
         const { displayName, isForced, isRadio, flipType } = parseLayerName(child.name);
+        child.flipType = flipType; // store for drawing logic
         const currentPath = parentPath ? `${parentPath}/${child.name}` : child.name;
         const childInForcedTree = inForcedTree || isForced;
         return {
@@ -193,6 +206,23 @@ function App() {
     finally { setIsProcessing(false); }
   };
 
+  const checkUpdate = async () => {
+    try {
+      const res = await fetch('https://api.github.com/repos/bluemistel/UgokuTachieMakerKIT/releases/latest');
+      const data = await res.json();
+      if (data && data.tag_name) {
+        setLatestVersion(data.tag_name.replace(/^v/, ''));
+      }
+    } catch (err) { console.error('Failed to fetch update info:', err); }
+  };
+
+  const openExternal = (url) => {
+    if (window.require) {
+      const { shell } = window.require('electron');
+      shell.openExternal(url);
+    }
+  };
+
   const toggleExpand = (nodeId) => {
     const s = new Set(expandedNodes);
     s.has(nodeId) ? s.delete(nodeId) : s.add(nodeId);
@@ -200,15 +230,7 @@ function App() {
   };
 
   const handleNodeClick = (e, node) => {
-    if (node.isRadio) {
-      const parts = node.fullPath.split('/');
-      parts.pop();
-      const parentPath = parts.join('/');
-      setRadioSelections(prev => ({ ...prev, [parentPath]: node.fullPath }));
-      setSelectedPaths(new Set([node.fullPath]));
-      setLastSelectedPath(node.fullPath);
-      return;
-    }
+    // If clicking a radio row, do not toggle the radio here unless it's handled on the icon
     const isCtrl = e.ctrlKey || e.metaKey;
     const isShift = e.shiftKey;
     if (isShift && lastSelectedPath && nodeMapRef.current.pathList) {
@@ -224,6 +246,14 @@ function App() {
       setSelectedPaths(new Set([node.fullPath]));
     }
     setLastSelectedPath(node.fullPath);
+  };
+
+  const handleRadioToggle = (e, node) => {
+    e.stopPropagation();
+    const parts = node.fullPath.split('/');
+    parts.pop();
+    const parentPath = parts.join('/');
+    setRadioSelections(prev => ({ ...prev, [parentPath]: node.fullPath }));
   };
 
   const handleCategoryDrop = (e, category, compositeIdx = null) => {
@@ -356,13 +386,20 @@ function App() {
 
   const isValidCanvas = (c) => c && (c instanceof HTMLCanvasElement || c instanceof ImageBitmap);
 
-  const drawNodeRecursively = (targetNode, ctx, scale = 1) => {
+  const drawNodeRecursively = (targetNode, ctx, scale = 1, globalFlipH = false, canvasWidth = 0) => {
     if (!targetNode) return;
     if (isValidCanvas(targetNode.canvas)) {
+      ctx.save();
+      const flipThisLayer = globalFlipH;
+      if (flipThisLayer) {
+        ctx.translate(canvasWidth, 0);
+        ctx.scale(-1, 1);
+      }
       ctx.drawImage(targetNode.canvas, targetNode.left * scale, targetNode.top * scale,
         targetNode.canvas.width * scale, targetNode.canvas.height * scale);
+      ctx.restore();
     } else if (targetNode.children) {
-      targetNode.children.forEach(c => drawNodeRecursively(c, ctx, scale));
+      targetNode.children.forEach(c => drawNodeRecursively(c, ctx, scale, globalFlipH, canvasWidth));
     }
   };
 
@@ -389,12 +426,13 @@ function App() {
         const { category, variantIdx } = previewComposite;
         const variant = mappingData[category]?.composites[variantIdx];
         if (variant) {
-          variant.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx));
+          const shouldFlip = showFlipLayers;
+          variant.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx, 1, shouldFlip, canvas.width));
         }
         return;
       }
       if (selectedPaths.size > 0) {
-        selectedPaths.forEach(p => drawNodeRecursively(nodeMapRef.current.get(p), ctx));
+        selectedPaths.forEach(p => drawNodeRecursively(nodeMapRef.current.get(p), ctx, 1, showFlipLayers, canvas.width));
       }
       return;
     }
@@ -410,14 +448,13 @@ function App() {
       const radioKey = parentPath;
       const selectedRadioPath = radioSelections[radioKey];
 
-      nodes.forEach(child => {
+      [...nodes].reverse().forEach(child => {
         const fullPath = child.fullPath;
         if (mappedPaths.has(fullPath)) return;
-        if (child.flipType) return;
+        if (child.flipType && child.flipType !== 'flipx') return; // Hide standard flips if drawn here
 
         // Skip entire subtree if hidden via treeVisibility manually
         // EXCEPT if it's explicitly forced !Layer (following manual override logic)
-        // Actually, user wants "Normal Folder" toggle to skip its subtree.
         const isVisible = treeVisibility[fullPath] !== false;
         if (!isVisible && !child.isForced) return;
 
@@ -426,14 +463,12 @@ function App() {
         }
 
         if (!child.isFolder) {
-          // 1. Explicitly forced (!Layer) - ALWAYS draw if visible in tree
-          // 2. Mapped by inclusion in forced tree (!Folder) AND visible in tree
           let shouldDraw = child.isForced;
           if (!shouldDraw && child.inForcedTree && isVisible) shouldDraw = true;
 
           if (shouldDraw) {
             const liveNode = nodeMapRef.current.get(fullPath);
-            if (isValidCanvas(liveNode?.canvas)) ctx.drawImage(liveNode.canvas, liveNode.left, liveNode.top);
+            drawNodeRecursively(liveNode, ctx, 1, showFlipLayers, canvas.width);
           }
         } else if (child.children) {
           drawUnmappedLayers(child.children, fullPath);
@@ -452,10 +487,16 @@ function App() {
           if (cat.mode === 'composite') {
             const vi = selections[slotKey] || 0;
             const variant = cat.composites[vi];
-            if (variant) variant.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx));
+            if (variant) {
+              const shouldFlip = showFlipLayers;
+              variant.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx, 1, shouldFlip, canvas.width));
+            }
           } else {
             const item = cat.items[selections[slotKey] || 0];
-            if (item) drawNodeRecursively(nodeMapRef.current.get(item.fullPath), ctx);
+            if (item) {
+              const shouldFlip = showFlipLayers;
+              drawNodeRecursively(nodeMapRef.current.get(item.fullPath), ctx, 1, shouldFlip, canvas.width);
+            }
           }
         }
         return; // Slot logic handled separately
@@ -467,13 +508,19 @@ function App() {
       if (cat.mode === 'composite') {
         const vi = selections[category] || 0;
         const variant = cat.composites[vi];
-        if (variant) variant.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx));
+        if (variant) {
+          const shouldFlip = showFlipLayers;
+          variant.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx, 1, shouldFlip, canvas.width));
+        }
       } else {
         const item = cat.items[selections[category] || 0];
-        if (item) drawNodeRecursively(nodeMapRef.current.get(item.fullPath), ctx);
+        if (item) {
+          const shouldFlip = showFlipLayers;
+          drawNodeRecursively(nodeMapRef.current.get(item.fullPath), ctx, 1, shouldFlip, canvas.width);
+        }
       }
     });
-  }, [psdData, viewMode, selectedPaths, previewComposite, mappingData, selections, disabledSlots, radioSelections, treeData, collectForcedPaths]);
+  }, [psdData, viewMode, selectedPaths, previewComposite, mappingData, selections, disabledSlots, radioSelections, treeData, collectForcedPaths, showFlipLayers]);
 
   useEffect(() => { renderPreview(); }, [renderPreview]);
 
@@ -502,17 +549,50 @@ function App() {
         const buf = await new Promise(res => ec.toBlob(b => { const r = new FileReader(); r.onloadend = () => res(Buffer.from(r.result)); r.readAsArrayBuffer(b); }, 'image/png'));
         await fs.writeFile(path.join(dir, `${sanitizeFilename(name)}.png`), buf);
       };
+      const getUniqueName = (baseName, usedSet) => {
+        let name = baseName;
+        let count = 1;
+        while (usedSet.has(name.toLowerCase())) {
+          name = `${baseName} (${count})`;
+          count++;
+        }
+        usedSet.add(name.toLowerCase());
+        return name;
+      };
+
       for (const cat of RENDER_ORDER) {
         const cc = mappingData[cat];
         const dir = path.join(finalPath, cat);
+        const usedNames = new Set();
         if (cc.mode === 'composite') {
           for (const v of cc.composites) {
             if (!v.layers.length) continue;
-            await saveImg(ctx => v.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx, scale)), dir, v.name);
+            const isFlip = v.layers.some(l => nodeMapRef.current.get(l.fullPath)?.flipType === 'flipx');
+            let exportName = v.name;
+            if (isFlip && !exportName.includes(':flipx')) exportName += ':flipx';
+            
+            exportName = getUniqueName(exportName, usedNames);
+            const safeName = sanitizeFilename(exportName);
+            await saveImg(ctx => {
+              // Always export as normal (non-flipped) regardless of UI toggle
+              v.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx, scale, false, ec.width));
+            }, dir, safeName);
           }
         } else {
-          for (const item of cc.items)
-            await saveImg(ctx => drawNodeRecursively(nodeMapRef.current.get(item.fullPath), ctx, scale), dir, item.name);
+          for (const item of cc.items) {
+            const node = nodeMapRef.current.get(item.fullPath);
+            let exportName = item.name;
+            if (node?.flipType) {
+              exportName += `:${node.flipType}`;
+            }
+
+            exportName = getUniqueName(exportName, usedNames);
+            const safeName = sanitizeFilename(exportName);
+            await saveImg(ctx => {
+              // Always export as normal (non-flipped) regardless of UI toggle
+              drawNodeRecursively(node, ctx, scale, false, ec.width);
+            }, dir, safeName);
+          }
         }
       }
       alert("書き出しが完了しました！");
@@ -524,6 +604,7 @@ function App() {
     const isExpanded = expandedNodes.has(node.id);
     const isSelected = selectedPaths.has(node.fullPath);
     if (node.flipType && !showFlipLayers) return null;
+
     const radioKey = parentPath;
     const selectedRadioPath = radioSelections[radioKey];
     const isRadioSelected = node.isRadio && node.fullPath === selectedRadioPath;
@@ -558,7 +639,7 @@ function App() {
             />
           )}
 
-          <span className="icon">{icon}</span>
+          <span className="icon" onClick={node.isRadio ? (e) => handleRadioToggle(e, node) : undefined}>{icon}</span>
           <span className="name">{node.name}</span>
           {node.isForced && <span className="tag forced-tag">必須</span>}
           {node.flipType && <span className="tag flip-tag">{node.flipType}</span>}
@@ -590,13 +671,23 @@ function App() {
               </button>
               <label className="toggle-label flip-toggle">
                 <input type="checkbox" checked={showFlipLayers} onChange={e => setShowFlipLayers(e.target.checked)} />
-                <span>反転レイヤー表示</span>
+                <span>左右反転表示</span>
               </label>
             </>
           )}
           <button className="btn-primary" onClick={() => setShowExportModal(true)} disabled={!psdData || isProcessing}>
             {isProcessing ? '書き出し中...' : 'YMM4形式で書き出し'}
           </button>
+
+          <div className="menu-container">
+            <button className="btn-menu" onClick={() => setDropdownOpen(!dropdownOpen)}>☰</button>
+            {dropdownOpen && (
+              <div className="dropdown-menu">
+                <button className="dropdown-item" onClick={() => { setDropdownOpen(false); checkUpdate(); setShowAppInfoModal(true); }}>アプリ情報</button>
+                <button className="dropdown-item" onClick={() => { setDropdownOpen(false); openExternal(NOTION_FORM_URL); }}>不具合報告・要望</button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -758,6 +849,38 @@ function App() {
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowExportModal(false)}>キャンセル</button>
               <button className="btn-primary" onClick={handleExport}>書き出し</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAppInfoModal && (
+        <div className="modal-overlay" onClick={() => setShowAppInfoModal(false)}>
+          <div className="modal-content glass" onClick={e => e.stopPropagation()}>
+            <h2>アプリ情報</h2>
+            <div className="version-info-box">
+              <div className="version-row">
+                <span>現在のバージョン:</span>
+                <span className="version-badge">{CURRENT_VERSION}</span>
+              </div>
+              {latestVersion && (
+                <div className="version-row">
+                  <span>最新のバージョン:</span>
+                  <span className="version-badge" style={{ background: latestVersion === CURRENT_VERSION ? '#10b981' : '#f59e0b' }}>
+                    {latestVersion}
+                  </span>
+                </div>
+              )}
+              {latestVersion && latestVersion !== CURRENT_VERSION && (
+                <div className="update-available">
+                  <p>最新バージョンが利用可能です！</p>
+                  <button className="btn-primary" onClick={() => openExternal(BOOTH_URL)}>Boothでダウンロード</button>
+                </div>
+              )}
+              {!latestVersion && <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>アップデート情報を確認中...</p>}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowAppInfoModal(false)}>閉じる</button>
             </div>
           </div>
         </div>
