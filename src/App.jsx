@@ -62,7 +62,7 @@ function App() {
   const [exportFolderName, setExportFolderName] = useState('');
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [mappingWidth, setMappingWidth] = useState(340);
-  const [showEyeblinkPopup, setShowEyeblinkPopup] = useState(false);
+  const [mainTab, setMainTab] = useState('mapping'); // 'mapping' or 'animation'
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showAppInfoModal, setShowAppInfoModal] = useState(false);
   const [latestVersion, setLatestVersion] = useState(null);
@@ -655,11 +655,14 @@ function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <img src="icon.png" alt="logo" className="header-logo" />
           <h1>動く立ち絵MakerKIT</h1>
-          {psdData && (
-            <div className="mode-switcher glass">
-              <button className={viewMode === 'mapping' ? 'active' : ''} onClick={() => { setViewMode('mapping'); setPreviewComposite(null); }}>仕分け</button>
+          <div className="mode-switcher glass">
+            <button className={mainTab === 'mapping' ? 'active' : ''} onClick={() => setMainTab('mapping')}>仕分け</button>
+            <button className={mainTab === 'animation' ? 'active' : ''} onClick={() => setMainTab('animation')}>目パチ・口パク</button>
+          </div>
+          {mainTab === 'mapping' && psdData && (
+            <div className="mode-switcher glass sub-switcher" style={{ marginLeft: '10px', fontSize: '0.8rem' }}>
+              <button className={viewMode === 'mapping' ? 'active' : ''} onClick={() => { setViewMode('mapping'); setPreviewComposite(null); }}>レイヤー設定</button>
               <button className={viewMode === 'preview' ? 'active' : ''} onClick={() => { setViewMode('preview'); setPreviewComposite(null); }}>プレビュー</button>
-              <button onClick={() => setShowEyeblinkPopup(true)} title="出力済みの画像から目パチ・口パク用ファイルを作成します">目パチ・口パク</button>
             </div>
           )}
         </div>
@@ -691,8 +694,9 @@ function App() {
         </div>
       </header>
 
-      <div className="workspace">
-        <aside className="tree-sidebar glass" style={{ width: `${sidebarWidth}px`, flex: 'none' }}>
+      {mainTab === 'mapping' ? (
+        <div className="workspace">
+          <aside className="tree-sidebar glass" style={{ width: `${sidebarWidth}px`, flex: 'none' }}>
           <div className="sidebar-header">
             <h3>レイヤー</h3>
             {!psdData && <span style={{ fontSize: '0.8rem', opacity: 0.5 }}>ファイル未選択</span>}
@@ -826,6 +830,11 @@ function App() {
           </div>
         </div>
       </div>
+    ) : (
+      <div className="workspace" style={{ padding: '0' }}>
+        <EyeblinkLipSyncPopup />
+      </div>
+    )}
 
       {showExportModal && (
         <div className="modal-overlay">
@@ -886,7 +895,7 @@ function App() {
         </div>
       )}
 
-      {showEyeblinkPopup && <EyeblinkLipSyncPopup onClose={() => setShowEyeblinkPopup(false)} />}
+
     </div>
   );
 }

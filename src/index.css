@@ -643,6 +643,21 @@ body {
   color: var(--bg-color);
 }
 
+.mode-switcher.sub-switcher {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mode-switcher.sub-switcher button {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+}
+
+.mode-switcher.sub-switcher button.active {
+  background: rgba(56, 189, 248, 0.4);
+  color: white;
+}
+
 /* Canvas Labels */
 .selection-label {
   position: absolute;

@@ -380,11 +380,10 @@ export default function EyeblinkLipSyncPopup({ onClose }) {
     };
 
     return (
-        <div className="modal-overlay" onDragOver={e => e.preventDefault()} onDrop={e => e.preventDefault()}>
-            <div className="modal-content glass" style={{ width: '96vw', height: '94vh', display: 'flex', flexDirection: 'column', padding: '20px' }} ref={containerRef}>
+        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: '16px', boxSizing: 'border-box' }} 
+            onDragOver={e => e.preventDefault()} onDrop={e => e.preventDefault()} ref={containerRef}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <h2>目パチ・口パク設定</h2>
-                    <button className="btn-icon delete" onClick={onClose} style={{ fontSize: '1.5rem' }}>×</button>
+                    <h2 style={{ fontSize: '1.2rem', color: 'var(--accent-color)' }}>目パチ・口パク設定</h2>
                 </div>
 
                 {!currentFolder ? (
@@ -572,7 +571,6 @@ export default function EyeblinkLipSyncPopup({ onClose }) {
 
                     </div>
                 )}
-            </div>
         </div>
     );
 }
