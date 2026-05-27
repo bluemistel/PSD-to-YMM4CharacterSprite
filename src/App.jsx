@@ -413,20 +413,318 @@ function App() {
 
   const isValidCanvas = (c) => c && (c instanceof HTMLCanvasElement || c instanceof ImageBitmap);
 
-  const drawNodeRecursively = (targetNode, ctx, scale = 1, globalFlipH = false, canvasWidth = 0) => {
-    if (!targetNode) return;
-    if (isValidCanvas(targetNode.canvas)) {
-      ctx.save();
-      const flipThisLayer = globalFlipH;
-      if (flipThisLayer) {
-        ctx.translate(canvasWidth, 0);
-        ctx.scale(-1, 1);
+  const applyOpacityToCanvas = (canvas, opacity) => {
+    const ctx = canvas.getContext('2d');
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.globalAlpha = opacity;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+  };
+
+  const applyMaskToCanvas = (canvas, mask, scale, flip, canvasWidth, canvasHeight) => {
+    const maskTemp = document.createElement('canvas');
+    maskTemp.width = canvasWidth;
+    maskTemp.height = canvasHeight;
+    const maskCtx = maskTemp.getContext('2d');
+
+    // defaultColor: 0=black(transparent outside), 255=white(visible outside)
+    // Fill the entire mask canvas with the defaultColor first
+    const defaultColor = mask.defaultColor ?? 0;
+    if (defaultColor >= 128) {
+      // White background: areas outside mask bounds are fully visible
+      maskCtx.fillStyle = '#ffffff';
+      maskCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+    }
+    // If defaultColor is 0 (black), the canvas is already transparent (0,0,0,0)
+    // which means areas outside mask bounds will multiply to 0 (correct)
+
+    maskCtx.save();
+    if (flip) {
+      maskCtx.translate(canvasWidth, 0);
+      maskCtx.scale(-1, 1);
+    }
+    const x = mask.left * scale;
+    const y = mask.top * scale;
+    const w = mask.canvas.width * scale;
+    const h = mask.canvas.height * scale;
+    maskCtx.drawImage(mask.canvas, x, y, w, h);
+    maskCtx.restore();
+
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const maskData = maskCtx.getImageData(0, 0, canvas.width, canvas.height);
+
+    const sData = imgData.data;
+    const mData = maskData.data;
+    const len = sData.length;
+    if (defaultColor >= 128) {
+      // White default: use red channel as mask value (drawn with fillRect white + drawImage grayscale)
+      for (let i = 0; i < len; i += 4) {
+        const maskVal = mData[i] / 255;
+        sData[i + 3] = Math.round(sData[i + 3] * maskVal);
       }
-      ctx.drawImage(targetNode.canvas, targetNode.left * scale, targetNode.top * scale,
-        targetNode.canvas.width * scale, targetNode.canvas.height * scale);
-      ctx.restore();
-    } else if (targetNode.children) {
-      targetNode.children.forEach(c => drawNodeRecursively(c, ctx, scale, globalFlipH, canvasWidth));
+    } else {
+      // Black default: areas outside mask are transparent (alpha=0 in maskTemp)
+      // For drawn mask pixels: use red channel; for unfilled areas: alpha=0 means mask=0
+      for (let i = 0; i < len; i += 4) {
+        // If maskTemp alpha is 0 (unfilled area), maskVal = 0 (block)
+        // If maskTemp alpha > 0 (drawn area), use the red channel as grayscale
+        const maskAlpha = mData[i + 3];
+        const maskVal = maskAlpha > 0 ? mData[i] / 255 : 0;
+        sData[i + 3] = Math.round(sData[i + 3] * maskVal);
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  };
+
+  const applyClippingMask = (canvas, maskCanvas) => {
+    const ctx = canvas.getContext('2d');
+    const maskCtx = maskCanvas.getContext('2d');
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const maskData = maskCtx.getImageData(0, 0, canvas.width, canvas.height);
+
+    const sData = imgData.data;
+    const mData = maskData.data;
+    const len = sData.length;
+    for (let i = 0; i < len; i += 4) {
+      const maskAlpha = mData[i + 3] / 255;
+      sData[i + 3] = Math.round(sData[i + 3] * maskAlpha);
+    }
+    ctx.putImageData(imgData, 0, 0);
+  };
+
+  const NATIVE_BLEND_MODES = {
+    'normal': 'source-over',
+    'darken': 'darken',
+    'multiply': 'multiply',
+    'color burn': 'color-burn',
+    'lighten': 'lighten',
+    'screen': 'screen',
+    'color dodge': 'color-dodge',
+    'overlay': 'overlay',
+    'soft light': 'soft-light',
+    'hard light': 'hard-light',
+    'difference': 'difference',
+    'exclusion': 'exclusion',
+    'hue': 'hue',
+    'saturation': 'saturation',
+    'color': 'color',
+    'luminosity': 'luminosity',
+    'linear dodge': 'plus-lighter'
+  };
+
+  const blendCanvasOntoContext = (srcCanvas, destCtx, blendMode) => {
+    const mode = blendMode || 'normal';
+    const nativeMode = NATIVE_BLEND_MODES[mode];
+    if (nativeMode) {
+      destCtx.save();
+      destCtx.globalCompositeOperation = nativeMode;
+      destCtx.drawImage(srcCanvas, 0, 0);
+      destCtx.restore();
+    } else {
+      blendCanvasCustom(srcCanvas, destCtx, mode);
+    }
+  };
+
+  const blendCanvasCustom = (srcCanvas, destCtx, blendMode) => {
+    const destCanvas = destCtx.canvas;
+    const width = destCanvas.width;
+    const height = destCanvas.height;
+
+    const srcCtx = srcCanvas.getContext('2d');
+    const srcData = srcCtx.getImageData(0, 0, width, height);
+    const destData = destCtx.getImageData(0, 0, width, height);
+
+    const sData = srcData.data;
+    const dData = destData.data;
+    const len = sData.length;
+
+    let blendFn;
+    switch (blendMode) {
+      case 'linear burn':
+        blendFn = (b, s) => Math.max(0, b + s - 1);
+        break;
+      case 'darker color':
+        blendFn = null;
+        break;
+      case 'lighter color':
+        blendFn = null;
+        break;
+      case 'vivid light':
+        blendFn = (b, s) => {
+          if (s <= 0.5) {
+            return s === 0 ? 0 : Math.max(0, 1 - (1 - b) / (2 * s));
+          } else {
+            return s === 1 ? 1 : Math.min(1, b / (2 * (1 - s)));
+          }
+        };
+        break;
+      case 'linear light':
+        blendFn = (b, s) => Math.max(0, Math.min(1, b + 2 * s - 1));
+        break;
+      case 'pin light':
+        blendFn = (b, s) => {
+          if (s < 0.5) {
+            return Math.min(b, 2 * s);
+          } else {
+            return Math.max(b, 2 * s - 1);
+          }
+        };
+        break;
+      case 'hard mix':
+        blendFn = (b, s) => (b + s < 1 ? 0 : 1);
+        break;
+      case 'subtract':
+        blendFn = (b, s) => Math.max(0, b - s);
+        break;
+      case 'divide':
+        blendFn = (b, s) => (s === 0 ? 1 : Math.min(1, b / s));
+        break;
+      default:
+        blendFn = (b, s) => s;
+    }
+
+    if (blendMode === 'darker color' || blendMode === 'lighter color') {
+      const isDarker = blendMode === 'darker color';
+      for (let i = 0; i < len; i += 4) {
+        const as = sData[i + 3] / 255;
+        if (as === 0) continue;
+
+        const ab = dData[i + 3] / 255;
+        if (ab === 0) {
+          dData[i] = sData[i];
+          dData[i + 1] = sData[i + 1];
+          dData[i + 2] = sData[i + 2];
+          dData[i + 3] = sData[i + 3];
+          continue;
+        }
+
+        const ys = (0.299 * sData[i] + 0.587 * sData[i + 1] + 0.114 * sData[i + 2]) / 255;
+        const yb = (0.299 * dData[i] + 0.587 * dData[i + 1] + 0.114 * dData[i + 2]) / 255;
+
+        const useSource = isDarker ? (ys < yb) : (ys > yb);
+
+        const ao = as + ab * (1 - as);
+        if (ao > 0) {
+          for (let c = 0; c < 3; c++) {
+            const s = sData[i + c] / 255;
+            const b = dData[i + c] / 255;
+            const mixed = useSource ? s : b;
+            const out_pm = (1 - ab) * (s * as) + (1 - as) * (b * ab) + as * ab * mixed;
+            dData[i + c] = Math.round((out_pm / ao) * 255);
+          }
+          dData[i + 3] = Math.round(ao * 255);
+        }
+      }
+    } else {
+      for (let i = 0; i < len; i += 4) {
+        const as = sData[i + 3] / 255;
+        if (as === 0) continue;
+
+        const ab = dData[i + 3] / 255;
+        if (ab === 0) {
+          dData[i] = sData[i];
+          dData[i + 1] = sData[i + 1];
+          dData[i + 2] = sData[i + 2];
+          dData[i + 3] = sData[i + 3];
+          continue;
+        }
+
+        const ao = as + ab * (1 - as);
+        if (ao > 0) {
+          for (let c = 0; c < 3; c++) {
+            const s = sData[i + c] / 255;
+            const b = dData[i + c] / 255;
+            const mixed = blendFn(b, s);
+            const out_pm = (1 - ab) * (s * as) + (1 - as) * (b * ab) + as * ab * mixed;
+            dData[i + c] = Math.round((out_pm / ao) * 255);
+          }
+          dData[i + 3] = Math.round(ao * 255);
+        }
+      }
+    }
+
+    destCtx.putImageData(destData, 0, 0);
+  };
+
+  const renderLayerContent = (layer, scale, flip, canvasWidth, canvasHeight) => {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvasWidth;
+    tempCanvas.height = canvasHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+
+    if (isValidCanvas(layer.canvas)) {
+      tempCtx.save();
+      if (flip) {
+        tempCtx.translate(canvasWidth, 0);
+        tempCtx.scale(-1, 1);
+      }
+      const x = layer.left * scale;
+      const y = layer.top * scale;
+      const w = layer.canvas.width * scale;
+      const h = layer.canvas.height * scale;
+      tempCtx.drawImage(layer.canvas, x, y, w, h);
+      tempCtx.restore();
+    } else if (layer.children) {
+      drawLayers(layer.children, tempCtx, scale, flip, canvasWidth);
+    }
+
+    if (layer.mask && layer.mask.canvas && !layer.mask.disabled) {
+      applyMaskToCanvas(tempCanvas, layer.mask, scale, flip, canvasWidth, canvasHeight);
+    }
+
+    if (layer.opacity !== undefined && layer.opacity !== 1) {
+      applyOpacityToCanvas(tempCanvas, layer.opacity);
+    }
+
+    return tempCanvas;
+  };
+
+  const drawLayers = (layersList, ctx, scale = 1, flip = false, canvasWidth = 0) => {
+    if (!layersList || layersList.length === 0) return;
+    const canvasHeight = ctx.canvas.height;
+    let i = 0;
+    while (i < layersList.length) {
+      const baseLayer = layersList[i];
+      if (!baseLayer) {
+        i++;
+        continue;
+      }
+
+      // Find clipping layers for this base layer
+      let clipLayers = [];
+      let j = i + 1;
+      while (j < layersList.length && layersList[j] && layersList[j].clipping) {
+        clipLayers.push(layersList[j]);
+        j++;
+      }
+      i = j;
+
+      // Render base layer
+      let baseCanvas;
+      const isPassThroughGroup = baseLayer.children && 
+        (baseLayer.blendMode === 'pass through' || !baseLayer.blendMode) && 
+        (!baseLayer.mask || baseLayer.mask.disabled) && 
+        (baseLayer.opacity === undefined || baseLayer.opacity === 1);
+
+      if (isPassThroughGroup) {
+        drawLayers(baseLayer.children, ctx, scale, flip, canvasWidth);
+      }
+
+      if (!isPassThroughGroup || clipLayers.length > 0) {
+        baseCanvas = renderLayerContent(baseLayer, scale, flip, canvasWidth, canvasHeight);
+        blendCanvasOntoContext(baseCanvas, ctx, baseLayer.blendMode);
+
+        if (clipLayers.length > 0) {
+          clipLayers.forEach(clipLayer => {
+            const clipCanvas = renderLayerContent(clipLayer, scale, flip, canvasWidth, canvasHeight);
+            applyClippingMask(clipCanvas, baseCanvas);
+            blendCanvasOntoContext(clipCanvas, ctx, clipLayer.blendMode);
+          });
+        }
+      }
     }
   };
 
@@ -454,12 +752,14 @@ function App() {
         const variant = mappingData[category]?.composites[variantIdx];
         if (variant) {
           const shouldFlip = showFlipLayers;
-          variant.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx, 1, shouldFlip, canvas.width));
+          const layers = variant.layers.map(l => nodeMapRef.current.get(l.fullPath)).filter(Boolean);
+          drawLayers(layers, ctx, 1, shouldFlip, canvas.width);
         }
         return;
       }
       if (selectedPaths.size > 0) {
-        selectedPaths.forEach(p => drawNodeRecursively(nodeMapRef.current.get(p), ctx, 1, showFlipLayers, canvas.width));
+        const layers = [...selectedPaths].map(p => nodeMapRef.current.get(p)).filter(Boolean);
+        drawLayers(layers, ctx, 1, showFlipLayers, canvas.width);
       }
       return;
     }
@@ -471,23 +771,20 @@ function App() {
     });
 
     // Draw unmapped layers (Base, Forced, Radio)
-    const drawUnmappedLayers = (nodes, parentPath = '') => {
+    const collectUnmappedLayers = (nodes, parentPath = '') => {
+      const list = [];
       const radioKey = parentPath;
       const selectedRadioPath = radioSelections[radioKey];
 
       [...nodes].reverse().forEach(child => {
         const fullPath = child.fullPath;
         if (mappedPaths.has(fullPath)) return;
-        if (child.flipType && child.flipType !== 'flipx') return; // Hide standard flips if drawn here
+        if (child.flipType && child.flipType !== 'flipx') return;
 
-        // Skip entire subtree if hidden via treeVisibility manually
-        // EXCEPT if it's explicitly forced !Layer (following manual override logic)
         const isVisible = treeVisibility[fullPath] !== false;
         if (!isVisible && !child.isForced) return;
 
-        if (child.isRadio) {
-          if (fullPath !== selectedRadioPath) return;
-        }
+        if (child.isRadio && fullPath !== selectedRadioPath) return;
 
         if (!child.isFolder) {
           let shouldDraw = child.isForced;
@@ -495,17 +792,22 @@ function App() {
 
           if (shouldDraw) {
             const liveNode = nodeMapRef.current.get(fullPath);
-            drawNodeRecursively(liveNode, ctx, 1, showFlipLayers, canvas.width);
+            if (liveNode) list.push(liveNode);
           }
         } else if (child.children) {
-          drawUnmappedLayers(child.children, fullPath);
+          list.push(...collectUnmappedLayers(child.children, fullPath));
         }
       });
+      return list;
     };
-    drawUnmappedLayers(treeData);
+    const unmappedLayers = collectUnmappedLayers(treeData);
+    drawLayers(unmappedLayers, ctx, 1, showFlipLayers, canvas.width);
 
-    RENDER_ORDER.forEach(category => {
+    // YMM4 spec: parts with non-normal blend mode are drawn on top of all other parts.
+    // Collect draws split by blend mode: normal first, non-normal last.
+    const getActiveLayersForCat = (category) => {
       const cat = mappingData[category];
+      const results = [];
 
       if (category === '他' || category === '後') {
         for (let i = 1; i <= SLOT_COUNT; i++) {
@@ -515,38 +817,61 @@ function App() {
             const vi = selections[slotKey] || 0;
             const variant = cat.composites[vi];
             if (variant) {
-              const shouldFlip = showFlipLayers;
-              variant.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx, 1, shouldFlip, canvas.width));
+              const layers = variant.layers.map(l => nodeMapRef.current.get(l.fullPath)).filter(Boolean);
+              if (layers.length > 0) results.push({ layers, category });
             }
           } else {
             const item = cat.items[selections[slotKey] || 0];
             if (item) {
-              const shouldFlip = showFlipLayers;
-              drawNodeRecursively(nodeMapRef.current.get(item.fullPath), ctx, 1, shouldFlip, canvas.width);
+              const layer = nodeMapRef.current.get(item.fullPath);
+              if (layer) results.push({ layers: [layer], category });
             }
           }
         }
-        return; // Slot logic handled separately
+        return results;
       }
 
-      // Universal check for all other categories
-      if (disabledSlots.has(category)) return;
+      if (disabledSlots.has(category)) return results;
 
       if (cat.mode === 'composite') {
         const vi = selections[category] || 0;
         const variant = cat.composites[vi];
         if (variant) {
-          const shouldFlip = showFlipLayers;
-          variant.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx, 1, shouldFlip, canvas.width));
+          const layers = variant.layers.map(l => nodeMapRef.current.get(l.fullPath)).filter(Boolean);
+          if (layers.length > 0) results.push({ layers, category });
         }
       } else {
         const item = cat.items[selections[category] || 0];
         if (item) {
-          const shouldFlip = showFlipLayers;
-          drawNodeRecursively(nodeMapRef.current.get(item.fullPath), ctx, 1, shouldFlip, canvas.width);
+          const layer = nodeMapRef.current.get(item.fullPath);
+          if (layer) results.push({ layers: [layer], category });
         }
       }
+      return results;
+    };
+
+    // Helper: check if a group of layers contains any non-normal blend mode
+    const hasNonNormalBlend = (layers) =>
+      layers.some(l => l && l.blendMode && l.blendMode !== 'normal');
+
+    const normalDraws = [];
+    const nonNormalDraws = [];
+
+    RENDER_ORDER.forEach(category => {
+      const catDraws = getActiveLayersForCat(category);
+      catDraws.forEach(d => {
+        if (hasNonNormalBlend(d.layers)) {
+          nonNormalDraws.push(d);
+        } else {
+          normalDraws.push(d);
+        }
+      });
     });
+
+    // Draw normal blend mode parts first (in RENDER_ORDER)
+    normalDraws.forEach(d => drawLayers(d.layers, ctx, 1, showFlipLayers, canvas.width));
+    // Draw non-normal blend mode parts on top
+    nonNormalDraws.forEach(d => drawLayers(d.layers, ctx, 1, showFlipLayers, canvas.width));
   }, [psdData, viewMode, selectedPaths, previewComposite, mappingData, selections, disabledSlots, radioSelections, treeData, collectForcedPaths, showFlipLayers]);
 
   useEffect(() => { renderPreview(); }, [renderPreview]);
@@ -602,7 +927,8 @@ function App() {
             const safeName = sanitizeFilename(exportName);
             await saveImg(ctx => {
               // Always export as normal (non-flipped) regardless of UI toggle
-              v.layers.forEach(l => drawNodeRecursively(nodeMapRef.current.get(l.fullPath), ctx, scale, false, ec.width));
+              const layers = v.layers.map(l => nodeMapRef.current.get(l.fullPath)).filter(Boolean);
+              drawLayers(layers, ctx, scale, false, ec.width);
             }, dir, safeName);
           }
         } else {
@@ -617,7 +943,7 @@ function App() {
             const safeName = sanitizeFilename(exportName);
             await saveImg(ctx => {
               // Always export as normal (non-flipped) regardless of UI toggle
-              drawNodeRecursively(node, ctx, scale, false, ec.width);
+              if (node) drawLayers([node], ctx, scale, false, ec.width);
             }, dir, safeName);
           }
         }
